@@ -17,7 +17,7 @@ def ajustar_brillo_canal(img, valores):
 
 def contraste_logaritmico(img, c=1):
 	img = img.astype(np.float32)
-	img = c * np.log1p(img)
+	img = c * np.log1p(img) #1+x
 	img = img * (255.0 / np.max(img))
 	return np.clip(img, 0, 255).astype(np.uint8)
 
@@ -33,9 +33,8 @@ def recortar_imagen(img, x1, y1, x2, y2):
 
 def zoom_area(img, x1, y1, x2, y2, escala=2):
 	area = img[y1:y2, x1:x2]
-	h, w = area.shape[:2]
 	zoomed = np.repeat(np.repeat(area, escala, axis=0), escala, axis=1)
-	return zoomed
+	return zoomed		
 
 def rotar_imagen(img, angulo, centro=None, escala=1.0):
 	angulo = angulo % 360
