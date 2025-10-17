@@ -290,6 +290,7 @@ class ImageApp:
         np_img = pil_to_np(self.result)
         main.mostrar_histograma(np_img)
 
+
 # -----------------------------
 # Run
 # -----------------------------
