@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # --- Brillo y Contraste ---
 def ajustar_brillo(img, valor):
 	img = img.astype(np.int16)
-	img = img + valor
+	img = img + valor * 255
 	img = np.clip(img, 0, 255)
 	return img.astype(np.uint8)
 
