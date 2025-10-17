@@ -1,320 +1,282 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, ttk, messagebox
 from PIL import Image, ImageTk
 import numpy as np
-import imgPro as ip   # <-- importa tus funciones
+import main  
+import matplotlib.pyplot as plt
 
-# === Variables globales ===
-img_original = None
-img_procesada = None
-img2 = None  # para fusión
-widgets_dinamicos = []  # para guardar y eliminar widgets temporales
-def abrir_imagen():
-    global img_original,img2
-    ruta = filedialog.askopenfilename(
-        title="Selecciona una imagen",
-        filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tiff"), ("Todos", "*.*")]
-    )
-    if not ruta:
-        return
-    
-    img_original = Image.open(ruta).resize((400, 300))
-    mostrar_imagen(img_original)
-    """
-    elif num == 1:
-        img_original = Image.open(ruta).resize((400, 300))
-        mostrar_imagen(img_original)
-    
-    elif num == 1:
-        img2 = Image.open(ruta).resize((400, 300))
-        mostrar_imagen(img2)
-    """
-        
+# -----------------------------
+# Utilidades
+# -----------------------------
+def pil_to_np(img: Image.Image):
+    return np.array(img.convert("RGB"))
 
-def mostrar_imagen(img):
-    foto = ImageTk.PhotoImage(img)
-    lbl.config(image=foto)
-    lbl.image = foto  
+def np_to_pil(arr: np.ndarray):
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
+# -----------------------------
+# Clase principal
+# -----------------------------
+class ImageApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Editor de Imágenes - Pablo Marín")
+        self.root.geometry("1000x700")
 
-def guardar_imagen():
-    global img_procesada
-    if img_procesada is None:
-        messagebox.showwarning("Atención", "No hay imagen procesada para guardar.")
-        return
-    ruta = filedialog.asksaveasfilename(defaultextension=".png",
-                                        filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg")])
-    if ruta:
-        img_procesada.save(ruta)
-        messagebox.showinfo("Guardar", "Imagen guardada correctamente.")
+        self.img = None
+        self.img2 = None
+        self.result = None
 
+        self._crear_menu()
+        self._crear_panel_controles()
+        self._crear_canvas()
 
-# === Aplicaciones de tus funciones ===
+    # -----------------------------
+    # Secciones de UI
+    # -----------------------------
+    def _crear_menu(self):
+        menubar = tk.Menu(self.root)
+        archivo_menu = tk.Menu(menubar, tearoff=0)
+        archivo_menu.add_command(label="Abrir imagen 1", command=self.abrir_imagen)
+        archivo_menu.add_command(label="Abrir imagen 2", command=self.abrir_imagen2)
+        archivo_menu.add_separator()
+        archivo_menu.add_command(label="Guardar resultado", command=self.guardar_resultado)
+        archivo_menu.add_separator()
+        archivo_menu.add_command(label="Salir", command=self.root.quit)
+        menubar.add_cascade(label="Archivo", menu=archivo_menu)
+        self.root.config(menu=menubar)
 
-def aplicar_brillo_btn(value):
-    global img_original
-    if img_original is None:
-        return
-    try:
-        val = float(value)
-    except ValueError:
-        val = 0.0
-    img_np = np.array(img_original, dtype=np.float32)
-    img_np = ip.ajustar_brillo(img_np, val)
-    img_pil = Image.fromarray(img_np.astype(np.uint8))
-    mostrar_imagen(img_pil)
-def aplicar_log():
-    global img_original, img_procesada
-    if img_original is None:
-        return
-    img_np = np.array(img_original)
-    resultado = ip.contraste_logaritmico(img_np, c=1)
-    img_procesada = Image.fromarray(resultado)
-    mostrar_imagen(img_procesada)
+    def _crear_panel_controles(self):
+        frame = ttk.Frame(self.root, padding=10)
+        frame.pack(side=tk.LEFT, fill=tk.Y)
 
-def aplicar_exp():
-    global img_original, img_procesada
-    if img_original is None:
-        messagebox.showwarning("Atención", "Primero abre una imagen.")
-        return
+        ttk.Label(frame, text="Brillo global").pack()
+        self.brillo_scale = ttk.Scale(frame, from_=-1, to=1, orient=tk.HORIZONTAL, command=self.aplicar_brillo)
+        self.brillo_scale.set(0)
+        self.brillo_scale.pack(fill=tk.X, pady=5)
 
-    img_np = np.array(img_original)
-    img_np = ip.contraste_exponencial(img_np, gamma=1)
-    img_procesada = Image.fromarray(img_np)
-    mostrar_imagen(img_procesada)
+        ttk.Label(frame, text="Brillo por canal (R, G, B)").pack(pady=(10,0))
+        self.entry_r = ttk.Entry(frame, width=5)
+        self.entry_g = ttk.Entry(frame, width=5)
+        self.entry_b = ttk.Entry(frame, width=5)
+        self.entry_r.insert(0, "0")
+        self.entry_g.insert(0, "0")
+        self.entry_b.insert(0, "0")
+        for e in (self.entry_r, self.entry_g, self.entry_b):
+            e.pack(pady=2)
+        ttk.Button(frame, text="Aplicar brillo por canal", command=self.aplicar_brillo_canal).pack(pady=5)
 
+        ttk.Button(frame, text="Contraste logarítmico", command=self.aplicar_contraste_log).pack(fill=tk.X, pady=2)
+        ttk.Button(frame, text="Contraste exponencial", command=self.aplicar_contraste_exp).pack(fill=tk.X, pady=2)
+        ttk.Button(frame, text="Negativo", command=self.aplicar_negativo).pack(fill=tk.X, pady=2)
+        ttk.Button(frame, text="Grises", command=self.aplicar_grises).pack(fill=tk.X, pady=2)
+        ttk.Button(frame, text="Binarizar", command=self.aplicar_binarizacion).pack(fill=tk.X, pady=2)
+        ttk.Button(frame, text="Histograma", command=self.mostrar_histograma).pack(fill=tk.X, pady=2)
 
-def limpiar_widgets():
-    """Elimina los widgets temporales (sliders, entries, etc.)"""
-    global widgets_dinamicos
-    for w in widgets_dinamicos:
-        w.destroy()
-    widgets_dinamicos = []
+        # --- NUEVAS FUNCIONES ---
+        ttk.Label(frame, text="Recorte (x1,y1,x2,y2)").pack(pady=(10,0))
+        self.recorte_entry = ttk.Entry(frame, width=20)
+        self.recorte_entry.insert(0, "50,50,200,200")
+        self.recorte_entry.pack(pady=2)
+        ttk.Button(frame, text="Recortar", command=self.aplicar_recorte).pack(fill=tk.X, pady=2)
 
-def modo_recorte():
-    """Activa el modo recorte: muestra las cajas para ingresar coordenadas"""
-    limpiar_widgets()  # limpia sliders, entradas previas, etc.
-    global widgets_dinamicos
+        ttk.Label(frame, text="Zoom área (x1,y1,x2,y2,escala)").pack(pady=(10,0))
+        self.zoom_entry = ttk.Entry(frame, width=25)
+        self.zoom_entry.insert(0, "50,50,150,150,2")
+        self.zoom_entry.pack(pady=2)
+        ttk.Button(frame, text="Zoom área", command=self.aplicar_zoom_area).pack(fill=tk.X, pady=2)
 
-    tk.Label(root, text="x1:").place(x=420, y=20)
-    x1_entry = tk.Entry(root, width=5)
-    x1_entry.place(x=450, y=20)
+        ttk.Label(frame, text="Extraer capa RGB (0=R,1=G,2=B)").pack(pady=(10,0))
+        self.capa_rgb_entry = ttk.Entry(frame, width=5)
+        self.capa_rgb_entry.insert(0, "0")
+        self.capa_rgb_entry.pack(pady=2)
+        ttk.Button(frame, text="Extraer capa RGB", command=self.aplicar_extraer_capa_rgb).pack(fill=tk.X, pady=2)
 
-    tk.Label(root, text="y1:").place(x=500, y=20)
-    y1_entry = tk.Entry(root, width=5)
-    y1_entry.place(x=530, y=20)
+        ttk.Label(frame, text="Extraer capa CMYK (0=C,1=M,2=Y,3=K)").pack(pady=(10,0))
+        self.capa_cmyk_entry = ttk.Entry(frame, width=5)
+        self.capa_cmyk_entry.insert(0, "3")
+        self.capa_cmyk_entry.pack(pady=2)
+        ttk.Button(frame, text="Extraer capa CMYK", command=self.aplicar_extraer_capa_cmyk).pack(fill=tk.X, pady=2)
 
-    tk.Label(root, text="x2:").place(x=420, y=50)
-    x2_entry = tk.Entry(root, width=5)
-    x2_entry.place(x=450, y=50)
+        ttk.Label(frame, text="Rotación (°)").pack(pady=(10,0))
+        self.rotacion_entry = ttk.Entry(frame, width=5)
+        self.rotacion_entry.insert(0, "0")
+        self.rotacion_entry.pack(pady=2)
+        ttk.Button(frame, text="Rotar", command=self.aplicar_rotacion).pack(fill=tk.X, pady=2)
 
-    tk.Label(root, text="y2:").place(x=500, y=50)
-    y2_entry = tk.Entry(root, width=5)
-    y2_entry.place(x=530, y=50)
-
-    # Botón aplicar recorte
-    btn_aplicar = tk.Button(root, text="Aplicar recorte",
-                            command=lambda: aplicar_recorte(x1_entry, y1_entry, x2_entry, y2_entry))
-    btn_aplicar.place(x=420, y=80)
-
-    # Guardar widgets para luego borrarlos
-    widgets_dinamicos = [x1_entry, y1_entry, x2_entry, y2_entry, btn_aplicar]
-
-
-def aplicar_recorte(x1_entry, y1_entry, x2_entry, y2_entry):
-    """Realiza el recorte según los valores ingresados."""
-    global img_original, img_procesada
-    if img_original is None:
-        messagebox.showwarning("Atención", "Primero abre una imagen.")
-        return
-
-    try:
-        x1 = int(x1_entry.get())
-        y1 = int(y1_entry.get())
-        x2 = int(x2_entry.get())
-        y2 = int(y2_entry.get())
-    except ValueError:
-        messagebox.showerror("Error", "Introduce valores numéricos válidos.")
-        return
-
-    img_np = np.array(img_original)
-    resultado = ip.recortar_imagen(img_np, x1, y1, x2, y2)
-    img_procesada = Image.fromarray(resultado)
-    mostrar_imagen(img_procesada)
-
-    limpiar_widgets()  # limpia las cajas después del recorte
-
-def modo_zoom():
-    """Activa el modo de zoom con entradas de coordenadas y factor."""
-    limpiar_widgets()
-    global widgets_dinamicos
-
-    # Etiquetas y entradas de coordenadas
-    tk.Label(root, text="x1:").place(x=420, y=20)
-    x1_entry = tk.Entry(root, width=5)
-    x1_entry.place(x=450, y=20)
-
-    tk.Label(root, text="y1:").place(x=500, y=20)
-    y1_entry = tk.Entry(root, width=5)
-    y1_entry.place(x=530, y=20)
-
-    tk.Label(root, text="x2:").place(x=420, y=50)
-    x2_entry = tk.Entry(root, width=5)
-    x2_entry.place(x=450, y=50)
-
-    tk.Label(root, text="y2:").place(x=500, y=50)
-    y2_entry = tk.Entry(root, width=5)
-    y2_entry.place(x=530, y=50)
-
-    # Entrada para el factor de zoom
-    tk.Label(root, text="Escala:").place(x=420, y=80)
-    escala_entry = tk.Entry(root, width=5)
-    escala_entry.insert(0, "2")  # valor por defecto
-    escala_entry.place(x=480, y=80)
-
-    # Botón para aplicar zoom
-    btn_aplicar_zoom = tk.Button(root, text="Aplicar Zoom",
-                                 command=lambda: aplicar_zoom(
-                                     x1_entry, y1_entry, x2_entry, y2_entry, escala_entry))
-    btn_aplicar_zoom.place(x=420, y=110)
-
-    widgets_dinamicos = [x1_entry, y1_entry, x2_entry, y2_entry, escala_entry, btn_aplicar_zoom]
-
-
-def aplicar_zoom(x1_entry, y1_entry, x2_entry, y2_entry, escala_entry):
-    """Aplica el zoom al área seleccionada."""
-    global img_original, img_procesada
-    if img_original is None:
-        messagebox.showwarning("Atención", "Primero abre una imagen.")
-        return
-
-    try:
-        x1 = int(x1_entry.get())
-        y1 = int(y1_entry.get())
-        x2 = int(x2_entry.get())
-        y2 = int(y2_entry.get())
-        escala = float(escala_entry.get())
-    except ValueError:
-        messagebox.showerror("Error", "Introduce valores numéricos válidos.")
-        return
-
-    img_np = np.array(img_original)
-    resultado = ip.zoom_area(img_np, x1, y1, x2, y2, escala)
-    img_procesada = Image.fromarray(resultado)
-    mostrar_imagen(img_procesada)
-
-    limpiar_widgets()  # limpia los widgets después del zoom
-
-def interfaz_rotar():
-    limpiar_widgets()
-    
-    lbl_angulo = tk.Label(root, text="Ángulo de rotación (°):")
-    lbl_angulo.place(x=650, y=80)
-    entry_angulo = tk.Entry(root, width=10)
-    entry_angulo.place(x=800, y=80)
-
-    def aplicar_rotacion():
-        global img_original
+        ttk.Button(frame, text="Fusión simple", command=self.aplicar_fusion).pack(fill=tk.X, pady=5)
+        ttk.Button(frame, text="Fusión ecualizada", command=self.aplicar_fusion_eq).pack(fill=tk.X, pady=5)
+    # --- NUEVAS FUNCIONES ---
+    def aplicar_recorte(self):
+        if self.img is None:
+            return
         try:
-            angulo = float(entry_angulo.get())
-        except ValueError:
+            coords = list(map(int, self.recorte_entry.get().split(',')))
+            if len(coords) != 4:
+                raise ValueError("Se requieren 4 valores: x1,y1,x2,y2")
+            np_img = pil_to_np(self.img)
+            out = main.recortar_imagen(np_img, *coords)
+            self.mostrar_imagen(np_to_pil(out))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def aplicar_zoom_area(self):
+        if self.img is None:
             return
-        if img_original is None:
+        try:
+            vals = list(map(int, self.zoom_entry.get().split(',')))
+            if len(vals) != 5:
+                raise ValueError("Se requieren 5 valores: x1,y1,x2,y2,escala")
+            np_img = pil_to_np(self.img)
+            out = main.zoom_area(np_img, *vals)
+            self.mostrar_imagen(np_to_pil(out))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def aplicar_extraer_capa_rgb(self):
+        if self.img is None:
             return
-        img_np = np.array(img_original)
-        rotada = ip.rotar_imagen(img_np, angulo)
-        img_procesada = Image.fromarray(rotada)
-        mostrar_imagen(img_procesada)
+        try:
+            canal = int(self.capa_rgb_entry.get())
+            if canal not in [0,1,2]:
+                raise ValueError("Canal debe ser 0, 1 o 2")
+            np_img = pil_to_np(self.img)
+            out = main.extraer_capa_rgb(np_img, canal)
+            self.mostrar_imagen(np_to_pil(out))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
-    btn_aplicar = tk.Button(root, text="Aplicar rotación", command=aplicar_rotacion)
-    btn_aplicar.place(x=740, y=120)
+    def aplicar_extraer_capa_cmyk(self):
+        if self.img is None:
+            return
+        try:
+            canal = int(self.capa_cmyk_entry.get())
+            if canal not in [0,1,2,3]:
+                raise ValueError("Canal debe ser 0, 1, 2 o 3")
+            np_img = pil_to_np(self.img)
+            out = main.extraer_capa_cmyk(np_img, canal)
+            self.mostrar_imagen(Image.fromarray(out))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
-    widgets_dinamicos.extend([lbl_angulo, entry_angulo, btn_aplicar])
-"""def aplicar_brillo_canal(value):
-    global img_original, img_procesada
-    if img_original is None:
-        messagebox.showwarning("Atención", "Primero abre una imagen.")
-        return
-    try:
-        val = float(value)
-    except ValueError:
-        val = 0.0
-    img_np = np.array(img_original, dtype=np.float32)
-    img_np = ip.ajustar_brillo_canal(img_np, val)
-    img_procesada = Image.fromarray(img_np)
-    mostrar_imagen(img_procesada)
+    def _crear_canvas(self):
+        self.canvas = tk.Canvas(self.root, bg="gray")
+        self.canvas.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-"""
-def aplicar_brillo_canal(canal, value):
-    """Ajusta el brillo de los canales R, G y B según los sliders."""
-    global img_original, img_procesada, valores_rgb
-    if img_original is None:
-        messagebox.showwarning("Atención", "Primero abre una imagen.")
-        return
+    # -----------------------------
+    # Funciones de imagen
+    # -----------------------------
+    def abrir_imagen(self):
+        path = filedialog.askopenfilename(filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.bmp")])
+        if not path: return
+        self.img = Image.open(path).convert("RGB")
+        self.mostrar_imagen(self.img)
 
-    # Actualizar el valor del canal correspondiente
-    valores_rgb[canal] = float(value) * 100  # escala -1..1 a -100..100
+    def abrir_imagen2(self):
+        path = filedialog.askopenfilename(filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.bmp")])
+        if not path: return
+        self.img2 = Image.open(path).convert("RGB")
+        messagebox.showinfo("Imagen 2", "Segunda imagen cargada correctamente.")
 
-    # Aplicar el brillo por canal
-    img_np = np.array(img_original)
-    resultado = ip.ajustar_brillo_canal(img_np, valores_rgb)
-    img_procesada = Image.fromarray(resultado)
+    def mostrar_imagen(self, img):
+        self.result = img
+        img_resized = img.copy()
+        img_resized.thumbnail((600, 600))
+        self.tk_img = ImageTk.PhotoImage(img_resized)
+        self.canvas.delete("all")
+        self.canvas.create_image(300, 300, image=self.tk_img)
 
-    mostrar_imagen(img_procesada)
+    def guardar_resultado(self):
+        if self.result is None:
+            messagebox.showwarning("Aviso", "No hay imagen para guardar.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".png")
+        if path:
+            self.result.save(path)
+            messagebox.showinfo("Guardado", f"Imagen guardada en {path}")
 
+    # -----------------------------
+    # Transformaciones
+    # -----------------------------
+    def aplicar_brillo(self, _=None):
+        if self.img is None: return
+        valor = float(self.brillo_scale.get())
+        np_img = pil_to_np(self.img)
+        out = main.ajustar_brillo(np_img, valor)
+        self.mostrar_imagen(np_to_pil(out))
 
-"""
-def aplicar_fusion():
-    global img_original, img2, img_procesada
-    if img_original is None or img2 is None:
-        messagebox.showwarning("Atención", "Debes abrir las dos imágenes primero.")
-        return
+    def aplicar_brillo_canal(self):
+        if self.img is None: return
+        valores = [int(self.entry_r.get()), int(self.entry_g.get()), int(self.entry_b.get())]
+        np_img = pil_to_np(self.img)
+        out = main.ajustar_brillo_canal(np_img, valores)
+        self.mostrar_imagen(np_to_pil(out))
 
-    img1_np = np.array(img_original.resize((400, 400)))
-    img2_np = np.array(img2.resize((400, 400)))
-    resultado = ip.fusionar_imagenes(img1_np, img2_np, alpha=0.5)
-    img_procesada = Image.fromarray(resultado)
-    mostrar_imagen(img_procesada, lbl_resultado)
+    def aplicar_contraste_log(self):
+        if self.img is None: return
+        np_img = pil_to_np(self.img)
+        out = main.contraste_logaritmico(np_img)
+        self.mostrar_imagen(np_to_pil(out))
 
-"""
-# === Interfaz Tkinter ===
-root = tk.Tk()
-root.title("Procesamiento de Imágenes")
-root.geometry("1000x600")
+    def aplicar_contraste_exp(self):
+        if self.img is None: return
+        np_img = pil_to_np(self.img)
+        out = main.contraste_exponencial(np_img, gamma=1.2)
+        self.mostrar_imagen(np_to_pil(out))
 
-res_img = root.resizable(False,False)
-boton = tk.Button(root, text= "Abrir imagen",command=abrir_imagen)
-boton.place(x=10,y=10)
+    def aplicar_negativo(self):
+        if self.img is None: return
+        np_img = pil_to_np(self.img)
+        out = main.foto_negativa(np_img)
+        self.mostrar_imagen(np_to_pil(out))
 
-lbl = tk.Label(root)
-lbl.place(x=40,y=40)
+    def aplicar_grises(self):
+        if self.img is None: return
+        np_img = pil_to_np(self.img)
+        out = main.convertir_a_grises(np_img)
+        self.mostrar_imagen(Image.fromarray(out))
 
-#brillo
-slider_brillo = tk.Scale(root, from_=-1, to= 1, resolution= 0.01, orient= tk.HORIZONTAL, length= 220, command= aplicar_brillo_btn)
+    def aplicar_binarizacion(self):
+        if self.img is None: return
+        np_img = pil_to_np(self.img)
+        out = main.binarizar(np_img, umbral=128)
+        self.mostrar_imagen(Image.fromarray(out))
 
-slider_brillo.set(0.0)
-slider_brillo.place(x = 420, y = 5)
+    def aplicar_rotacion(self):
+        if self.img is None: return
+        try:
+            angulo = int(self.rotacion_entry.get())
+            np_img = pil_to_np(self.img)
+            out = main.rotar_imagen(np_img, angulo)
+            self.mostrar_imagen(np_to_pil(out))
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
-#contraste log
-boton_contraste_log = tk.Button(root, text= "Aplicar contraste logaritmico",command=aplicar_log)
-boton_contraste_log.place(x=500,y=200)
+    def aplicar_fusion(self):
+        if self.img is None or self.img2 is None:
+            messagebox.showwarning("Aviso", "Carga dos imágenes para fusionar.")
+            return
+        out = main.fusionar_imagenes(pil_to_np(self.img), pil_to_np(self.img2), alpha=0.5)
+        self.mostrar_imagen(np_to_pil(out))
 
-#contraste exponencial
-boton_contraste_exp = tk.Button(root, text= "Aplicar contraste exponencial",command=aplicar_exp)
-boton_contraste_exp.place(x=500,y=250)
+    def aplicar_fusion_eq(self):
+        if self.img is None or self.img2 is None:
+            messagebox.showwarning("Aviso", "Carga dos imágenes para fusionar.")
+            return
+        out = main.fusionar_imagenes_ecualizadas(pil_to_np(self.img), pil_to_np(self.img2), alpha=0.5)
+        self.mostrar_imagen(np_to_pil(out))
 
-#boton recorte
-btn_recorte = tk.Button(root, text="Recortar imagen", command=modo_recorte)
-btn_recorte.place(x=240, y=20)
+    def mostrar_histograma(self):
+        if self.result is None:
+            messagebox.showwarning("Aviso", "Primero aplica una transformación o abre una imagen.")
+            return
+        np_img = pil_to_np(self.result)
+        main.mostrar_histograma(np_img)
 
-#boton zoom
-btn_zoom = tk.Button(root, text="zoom a la imagen", command=modo_zoom)
-btn_zoom.place(x=240, y=500)
-
-#boton rotar imagen
-btn_rotar = tk.Button(root, text="Rotar imagen", command=interfaz_rotar)
-btn_rotar.place(x=240, y=300)
-
-
-
-root.mainloop()
+# -----------------------------
+# Run
+# -----------------------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ImageApp(root)
+    root.mainloop()

@@ -1,5 +1,4 @@
 import numpy as np
-
 import matplotlib.pyplot as plt
 
 
@@ -95,8 +94,26 @@ def extraer_capa_cmyk(img, canal):
 	M = (1-img[:,:,1]-K)/(1-K+1e-8)
 	Y = (1-img[:,:,0]-K)/(1-K+1e-8)
 	CMYK = [C, M, Y, K]
-	capa = (CMYK[canal]*255).astype(np.uint8)
-	return capa
+	canal_img = (CMYK[canal]*255).astype(np.uint8)
+	# Crear imagen RGB coloreada para cada canal
+	rgb = np.zeros((*canal_img.shape, 3), dtype=np.uint8)
+	if canal == 0:  # Cian
+		rgb[...,0] = 0
+		rgb[...,1] = canal_img
+		rgb[...,2] = canal_img
+	elif canal == 1:  # Magenta
+		rgb[...,0] = canal_img
+		rgb[...,1] = 0
+		rgb[...,2] = canal_img
+	elif canal == 2:  # Amarillo
+		rgb[...,0] = canal_img
+		rgb[...,1] = canal_img
+		rgb[...,2] = 0
+	elif canal == 3:  # Negro
+		rgb[...,0] = canal_img
+		rgb[...,1] = canal_img
+		rgb[...,2] = canal_img
+	return rgb
 
 # --- Negativo, Grises y Binario ---
 def foto_negativa(img):
