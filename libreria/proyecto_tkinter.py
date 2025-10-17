@@ -3,7 +3,6 @@ from tkinter import filedialog, ttk, messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import main  
-import matplotlib.pyplot as plt
 
 # -----------------------------
 # Utilidades
@@ -31,9 +30,9 @@ class ImageApp:
         self._crear_panel_controles()
         self._crear_canvas()
 
-    # -----------------------------
+    # ----------------------------
     # Secciones de UI
-    # -----------------------------
+    # ----------------------------
     def _crear_menu(self):
         menubar = tk.Menu(self.root)
         archivo_menu = tk.Menu(menubar, tearoff=0)
@@ -47,9 +46,27 @@ class ImageApp:
         self.root.config(menu=menubar)
 
     def _crear_panel_controles(self):
-        frame = ttk.Frame(self.root, padding=10)
-        frame.pack(side=tk.LEFT, fill=tk.Y)
+        # Canvas para scroll
+        panel_canvas = tk.Canvas(self.root, width=250)
+        panel_canvas.pack(side=tk.LEFT, fill=tk.Y, expand=False)
+        scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=panel_canvas.yview)
+        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        panel_canvas.configure(yscrollcommand=scrollbar.set)
 
+        # Frame dentro del canvas
+        frame = ttk.Frame(panel_canvas, padding=10)
+        frame_id = panel_canvas.create_window((0,0), window=frame, anchor="nw")
+
+        def on_frame_configure(event):
+            panel_canvas.configure(scrollregion=panel_canvas.bbox("all"))
+        frame.bind("<Configure>", on_frame_configure)
+
+        # Habilitar scroll con la rueda del ratón
+        def _on_mousewheel(event):
+            panel_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        panel_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # --- Controles ---
         ttk.Label(frame, text="Brillo global").pack()
         self.brillo_scale = ttk.Scale(frame, from_=-1, to=1, orient=tk.HORIZONTAL, command=self.aplicar_brillo)
         self.brillo_scale.set(0)
